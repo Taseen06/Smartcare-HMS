@@ -1,0 +1,346 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import api from '../../utils/api'
+import toast from 'react-hot-toast'
+import { format } from 'date-fns'
+
+const STATUS_COLORS = {
+  pending: 'badge-pending',
+  confirmed: 'badge-confirmed',
+  completed: 'badge-completed',
+  cancelled: 'badge-cancelled'
+}
+
+export default function DoctorDashboard() {
+  const { user, logout, updateUser } = useAuth()
+  const navigate = useNavigate()
+  const [tab, setTab] = useState('today')
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [dateFilter, setDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [profile, setProfile] = useState({})
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState(null)
+
+  useEffect(() => {
+    fetchAppointments()
+  }, [dateFilter])
+
+  useEffect(() => {
+    setProfile({
+      name: user?.name,
+      phone: user?.phone,
+      specialization: user?.specialization,
+      experience: user?.experience,
+      consultationFee: user?.consultationFee,
+      qualifications: user?.qualifications,
+      bio: user?.bio
+    })
+  }, [user])
+
+  const fetchAppointments = async () => {
+    setLoading(true)
+    try {
+      const params = {}
+      if (tab === 'today' || dateFilter) params.date = dateFilter
+      const res = await api.get('/appointments/doctor', { params })
+      setAppointments(res.data.appointments || [])
+    } catch {
+      toast.error('Failed to load appointments')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'today') {
+      setDateFilter(format(new Date(), 'yyyy-MM-dd'))
+    } else if (tab === 'all') {
+      setDateFilter('')
+      loadAllAppointments()
+    }
+  }, [tab])
+
+  const loadAllAppointments = async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/appointments/doctor')
+      setAppointments(res.data.appointments || [])
+    } catch {
+      toast.error('Failed to load appointments')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateStatus = async (id, status) => {
+    try {
+      await api.put(`/appointments/${id}/status`, { status })
+      toast.success(`Appointment ${status}`)
+      tab === 'all' ? loadAllAppointments() : fetchAppointments()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update')
+    }
+  }
+
+  const saveProfile = async (e) => {
+    e.preventDefault()
+    setSavingProfile(true)
+    try {
+      const res = await api.put('/auth/profile', profile)
+      updateUser(res.data.user)
+      toast.success('Profile updated!')
+    } catch {
+      toast.error('Failed to update profile')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const stats = {
+    total: appointments.length,
+    pending: appointments.filter(a => a.status === 'pending').length,
+    confirmed: appointments.filter(a => a.status === 'confirmed').length,
+    completed: appointments.filter(a => a.status === 'completed').length,
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Nav */}
+      <div className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-gradient-to-br from-teal-500 to-green-600 rounded-xl flex items-center justify-center text-white font-bold">
+                {user?.name?.charAt(0)}
+              </div>
+              <div>
+                <div className="font-semibold text-gray-900 text-sm">{user?.name}</div>
+                <div className="text-xs text-teal-600 font-medium">{user?.specialization}</div>
+              </div>
+            </div>
+            <div className="flex gap-3 items-center">
+              <span className="hidden sm:inline text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-semibold">● Online</span>
+              <button onClick={() => navigate('/')} className="btn-secondary text-sm py-1.5 px-3">← Home</button>
+              <button onClick={() => { logout(); navigate('/') }} className="text-sm text-red-500 hover:text-red-600 font-medium">Logout</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          {[
+            { label: 'Shown', value: stats.total, color: 'text-primary-600', bg: 'bg-primary-50', icon: '📋' },
+            { label: 'Pending', value: stats.pending, color: 'text-yellow-600', bg: 'bg-yellow-50', icon: '⏳' },
+            { label: 'Confirmed', value: stats.confirmed, color: 'text-green-600', bg: 'bg-green-50', icon: '✅' },
+            { label: 'Completed', value: stats.completed, color: 'text-blue-600', bg: 'bg-blue-50', icon: '🏥' },
+          ].map((s, i) => (
+            <div key={i} className={`${s.bg} rounded-2xl p-4 animate-slide-up`} style={{ animationDelay: `${i * 0.05}s` }}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xl">{s.icon}</span>
+                <span className={`text-2xl font-heading font-bold ${s.color}`}>{s.value}</span>
+              </div>
+              <div className="text-sm text-gray-600">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {[
+            { key: 'today', label: "Today's Schedule" },
+            { key: 'filter', label: 'Filter by Date' },
+            { key: 'all', label: 'All Appointments' },
+            { key: 'profile', label: 'My Profile' },
+          ].map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === t.key ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-teal-300'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Date Filter */}
+        {tab === 'filter' && (
+          <div className="flex items-center gap-3 mb-6 animate-fade-in">
+            <label className="text-sm font-medium text-gray-700">Select Date:</label>
+            <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+              className="input max-w-xs" />
+            <button onClick={fetchAppointments} className="btn-primary text-sm py-2 px-4">Search</button>
+          </div>
+        )}
+
+        {/* Appointments List */}
+        {(tab === 'today' || tab === 'filter' || tab === 'all') && (
+          <div className="animate-fade-in">
+            {loading ? (
+              <LoadingSkeleton />
+            ) : appointments.length === 0 ? (
+              <div className="card text-center py-12">
+                <div className="text-4xl mb-3">📅</div>
+                <h3 className="font-semibold text-gray-900 mb-1">No appointments found</h3>
+                <p className="text-gray-500 text-sm">
+                  {tab === 'today' ? "You have no appointments scheduled for today." : "No appointments match your criteria."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {appointments.map((apt, i) => (
+                  <div key={apt._id} className="card hover:shadow-md transition-all animate-slide-up" style={{ animationDelay: `${i * 0.04}s` }}>
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      {/* Patient Info */}
+                      <div className="flex gap-4 flex-1 min-w-0">
+                        <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-teal-100 rounded-xl flex items-center justify-center text-primary-700 font-bold text-lg flex-shrink-0">
+                          {apt.patient?.name?.charAt(0) || '?'}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-gray-900">{apt.patient?.name}</h3>
+                          <p className="text-sm text-gray-500">{apt.patient?.email}</p>
+                          {apt.patient?.phone && <p className="text-sm text-gray-500">📞 {apt.patient.phone}</p>}
+                          <div className="flex flex-wrap gap-3 mt-2">
+                            <span className="text-sm text-gray-600">📅 {apt.date ? format(new Date(apt.date), 'dd MMM yyyy') : '—'}</span>
+                            <span className="text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded-lg">⏰ {apt.timeSlot}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status + Actions */}
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        <span className={STATUS_COLORS[apt.status] || 'badge bg-gray-100 text-gray-600'}>{apt.status}</span>
+                        <div className="flex gap-2 flex-wrap justify-end">
+                          {apt.status === 'pending' && (
+                            <>
+                              <button onClick={() => updateStatus(apt._id, 'confirmed')} className="btn-success text-xs py-1 px-3">Confirm</button>
+                              <button onClick={() => updateStatus(apt._id, 'cancelled')} className="btn-danger text-xs py-1 px-3">Reject</button>
+                            </>
+                          )}
+                          {apt.status === 'confirmed' && (
+                            <button onClick={() => updateStatus(apt._id, 'completed')} className="btn-primary text-xs py-1 px-3">Mark Done</button>
+                          )}
+                          <button onClick={() => setSelectedPatient(apt.patient)} className="btn-secondary text-xs py-1 px-3">View Patient</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Profile Tab */}
+        {tab === 'profile' && (
+          <div className="max-w-lg animate-fade-in">
+            <div className="card">
+              <h2 className="font-heading font-semibold text-lg mb-6">Doctor Profile</h2>
+              <form onSubmit={saveProfile} className="space-y-4">
+                <div>
+                  <label className="label">Full Name</label>
+                  <input type="text" value={profile.name || ''} onChange={e => setProfile({ ...profile, name: e.target.value })} className="input" />
+                </div>
+                <div>
+                  <label className="label">Phone</label>
+                  <input type="tel" value={profile.phone || ''} onChange={e => setProfile({ ...profile, phone: e.target.value })} className="input" />
+                </div>
+                <div>
+                  <label className="label">Specialization</label>
+                  <input type="text" value={profile.specialization || ''} onChange={e => setProfile({ ...profile, specialization: e.target.value })} className="input" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Experience (years)</label>
+                    <input type="number" value={profile.experience || ''} onChange={e => setProfile({ ...profile, experience: e.target.value })} className="input" min={0} />
+                  </div>
+                  <div>
+                    <label className="label">Consultation Fee (৳)</label>
+                    <input type="number" value={profile.consultationFee || ''} onChange={e => setProfile({ ...profile, consultationFee: e.target.value })} className="input" min={0} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Qualifications</label>
+                  <input type="text" value={profile.qualifications || ''} onChange={e => setProfile({ ...profile, qualifications: e.target.value })} className="input" placeholder="MBBS, MD, etc." />
+                </div>
+                <div>
+                  <label className="label">Bio</label>
+                  <textarea value={profile.bio || ''} onChange={e => setProfile({ ...profile, bio: e.target.value })} className="input resize-none" rows={3} placeholder="Brief professional bio..." />
+                </div>
+                <div>
+                  <label className="label">Email (cannot change)</label>
+                  <input type="email" value={user?.email || ''} className="input bg-gray-50" disabled />
+                </div>
+                <button type="submit" disabled={savingProfile} className="btn-primary w-full" style={{ background: 'linear-gradient(to right, #0d9488, #16a34a)' }}>
+                  {savingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Patient Detail Modal */}
+      {selectedPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md animate-slide-up">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="font-heading font-bold text-lg">Patient Details</h2>
+              <button onClick={() => setSelectedPatient(null)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex gap-4 items-center">
+                <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-teal-500 rounded-xl flex items-center justify-center text-white font-bold text-xl">
+                  {selectedPatient.name?.charAt(0)}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-lg">{selectedPatient.name}</h3>
+                  <p className="text-gray-500 text-sm">{selectedPatient.email}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Phone', value: selectedPatient.phone || 'Not provided' },
+                  { label: 'Date of Birth', value: selectedPatient.dateOfBirth ? format(new Date(selectedPatient.dateOfBirth), 'dd MMM yyyy') : 'Not provided' },
+                  { label: 'Address', value: selectedPatient.address || 'Not provided' },
+                ].map((item, i) => (
+                  <div key={i} className={item.label === 'Address' ? 'col-span-2' : ''}>
+                    <div className="text-xs text-gray-400 uppercase font-semibold mb-1">{item.label}</div>
+                    <div className="text-gray-900 text-sm">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-6 pt-0">
+              <button onClick={() => setSelectedPatient(null)} className="btn-secondary w-full">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="card animate-pulse">
+          <div className="flex gap-4">
+            <div className="w-12 h-12 bg-gray-200 rounded-xl flex-shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-gray-200 rounded w-1/3" />
+              <div className="h-3 bg-gray-200 rounded w-1/4" />
+              <div className="h-3 bg-gray-200 rounded w-1/2" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
