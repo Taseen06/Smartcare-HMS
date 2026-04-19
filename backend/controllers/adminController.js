@@ -48,6 +48,32 @@ const updateAdminKey = async (req, res) => {
   }
 };
 
+// Get current admin key
+const getAdminKey = async (req, res) => {
+  try {
+    // Get the admin key from environment first
+    let adminKey = process.env.ADMIN_KEY;
+
+    // If not in environment, get from admin user's stored key
+    if (!adminKey) {
+      const adminUser = await User.findOne({ role: 'admin' }).select('adminKey');
+      adminKey = adminUser?.adminKey;
+    }
+
+    // If still no admin key, use the default from seed script
+    if (!adminKey) {
+      adminKey = 'SMARTCARE_ADMIN_2024';
+      console.log('Using default admin key');
+    }
+
+    console.log('Retrieved admin key:', adminKey ? '***' + adminKey.slice(-4) : 'none');
+    res.json({ success: true, adminKey });
+  } catch (error) {
+    console.error('Error getting admin key:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const getAdminTests = async (req, res) => {
   try {
     const tests = await Test.find().populate('createdBy', 'name email');
@@ -112,4 +138,4 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-module.exports = { getAllDoctors, removeDoctor, updateAdminKey, getAdminTests, getTestRequests, updateAppointment, getDashboardStats };
+module.exports = { getAllDoctors, removeDoctor, updateAdminKey, getAdminKey, getAdminTests, getTestRequests, updateAppointment, getDashboardStats };

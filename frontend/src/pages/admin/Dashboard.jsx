@@ -32,6 +32,10 @@ export default function AdminDashboard() {
   const [editingTest, setEditingTest] = useState(null)
   const [testForm, setTestForm] = useState({ name: '', description: '', price: '', duration: '', category: 'other', preparationInstructions: '' })
   const [savingTest, setSavingTest] = useState(false)
+  const [adminKey, setAdminKey] = useState('')
+  const [showAdminKey, setShowAdminKey] = useState(false)
+  const [updatingKey, setUpdatingKey] = useState(false)
+  const [keyForm, setKeyForm] = useState({ currentPassword: '', newAdminKey: '', confirmKey: '' })
 
   useEffect(() => {
     loadStats()
@@ -41,6 +45,7 @@ export default function AdminDashboard() {
     if (tab === 'tests') loadTests()
     if (tab === 'doctors') loadDoctors()
     if (tab === 'stats') loadStats()
+    if (tab === 'settings') loadAdminKey()
   }, [tab])
 
   const loadStats = async () => {
@@ -68,6 +73,44 @@ export default function AdminDashboard() {
       setDoctors(res.data.doctors || [])
     } catch { toast.error('Failed to load doctors') }
     finally { setLoading(false) }
+  }
+
+  const loadAdminKey = async () => {
+    try {
+      console.log('Loading admin key...')
+      const res = await api.get('/admin/admin-key')
+      console.log('Admin key response:', res.data)
+      setAdminKey(res.data.adminKey || '')
+    } catch (err) {
+      console.error('Failed to load admin key:', err)
+      toast.error('Failed to load admin key')
+    }
+  }
+
+  const updateAdminKey = async (e) => {
+    e.preventDefault()
+    if (keyForm.newAdminKey !== keyForm.confirmKey) {
+      toast.error('New admin key and confirmation do not match')
+      return
+    }
+    if (keyForm.newAdminKey.length < 8) {
+      toast.error('Admin key must be at least 8 characters')
+      return
+    }
+    setUpdatingKey(true)
+    try {
+      await api.put('/admin/update-admin-key', {
+        currentPassword: keyForm.currentPassword,
+        newAdminKey: keyForm.newAdminKey
+      })
+      toast.success('Admin key updated successfully!')
+      setKeyForm({ currentPassword: '', newAdminKey: '', confirmKey: '' })
+      loadAdminKey()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update admin key')
+    } finally {
+      setUpdatingKey(false)
+    }
   }
 
   const loadTestAppointments = async (test) => {
@@ -182,6 +225,7 @@ export default function AdminDashboard() {
             { key: 'stats', label: '📊 Overview' },
             { key: 'tests', label: '🔬 Tests' },
             { key: 'doctors', label: '👨‍⚕️ Doctors' },
+            { key: 'settings', label: '⚙️ Settings' },
           ].map(t => (
             <button key={t.key} onClick={() => { setTab(t.key); setSelectedTest(null) }}
               className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${tab === t.key ? 'bg-purple-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:border-purple-300'}`}>
@@ -506,6 +550,153 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* ── SETTINGS TAB ── */}
+      {tab === 'settings' && (
+        <div className="animate-fade-in">
+          <h2 className="font-heading font-bold text-xl text-gray-900 mb-6">System Settings</h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Admin Key Management */}
+            <div className="card">
+              <h3 className="font-heading font-semibold text-gray-900 mb-4">Admin Key Management</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                The admin key is required for new admin account registration. Keep it secure and update regularly.
+              </p>
+
+              {/* Current Admin Key Display */}
+              <div className="mb-6">
+                <label className="label">Current Admin Key</label>
+                <div className="flex gap-2">
+                  <input
+                    type={showAdminKey ? "text" : "password"}
+                    value={adminKey}
+                    readOnly
+                    className="input flex-1 bg-gray-50"
+                    placeholder="Loading..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminKey(!showAdminKey)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    {showAdminKey ? (
+                      <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Click the eye icon to reveal/hide the key
+                </p>
+              </div>
+
+              {/* Update Admin Key Form */}
+              <form onSubmit={updateAdminKey} className="space-y-4">
+                <div>
+                  <label className="label">Current Password <span className="text-red-400">*</span></label>
+                  <input
+                    type="password"
+                    value={keyForm.currentPassword}
+                    onChange={e => setKeyForm({ ...keyForm, currentPassword: e.target.value })}
+                    placeholder="Enter your current password"
+                    className="input"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="label">New Admin Key <span className="text-red-400">*</span></label>
+                  <input
+                    type="password"
+                    value={keyForm.newAdminKey}
+                    onChange={e => setKeyForm({ ...keyForm, newAdminKey: e.target.value })}
+                    placeholder="Enter new admin key (min 8 characters)"
+                    className="input"
+                    required
+                    minLength={8}
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Confirm New Admin Key <span className="text-red-400">*</span></label>
+                  <input
+                    type="password"
+                    value={keyForm.confirmKey}
+                    onChange={e => setKeyForm({ ...keyForm, confirmKey: e.target.value })}
+                    placeholder="Confirm new admin key"
+                    className="input"
+                    required
+                    minLength={8}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={updatingKey}
+                  className="w-full btn-primary flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(to right, #7c3aed, #db2777)' }}
+                >
+                  {updatingKey ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Updating...</>
+                  ) : (
+                    <>🔑 Update Admin Key</>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div className="text-xs text-amber-800">
+                    <strong>Important:</strong> Remember to update your <code>.env</code> file with the new admin key to persist changes across server restarts.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* System Information */}
+            <div className="card">
+              <h3 className="font-heading font-semibold text-gray-900 mb-4">System Information</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">System Status</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    🟢 Online
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">Database</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    🗄️ Connected
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">Working Hours</span>
+                  <span className="text-sm font-medium text-gray-900">8:00 AM – 10:00 PM</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">Working Days</span>
+                  <span className="text-sm font-medium text-gray-900">Sat – Thu</span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-sm text-gray-600">Slot Duration</span>
+                  <span className="text-sm font-medium text-gray-900">15 minutes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
