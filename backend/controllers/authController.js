@@ -1,8 +1,28 @@
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const { User, Patient, Doctor, Admin } = require('../models/User');
 
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });
+  return jwt.sign({ id }, process.env.JWT_SECRET, { 
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d' 
+  });
+};
+
+const sendEmail = async (options) => {
+  const transporter = nodemailer.createTransport({
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"Smartcare HMS" <${process.env.EMAIL_USER}>`,
+    to: options.email,
+    subject: options.subject,
+    text: options.message,
+  });
 };
 
 // @route POST /api/auth/register/:role
@@ -13,39 +33,96 @@ const register = async (req, res) => {
             specialization, experience, qualifications, consultationFee,
             adminKey } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'Email already registered' });
     }
 
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); 
+
     let user;
+    const userData = { name, email, password, phone, role, otp, otpExpires, isVerified: false };
 
     if (role === 'patient') {
-      user = await Patient.create({ name, email, password, phone, role: 'patient', dateOfBirth, address });
+      user = await Patient.create({ ...userData, dateOfBirth, address });
     } else if (role === 'doctor') {
       if (!specialization || !experience || !consultationFee) {
         return res.status(400).json({ success: false, message: 'Please provide all doctor details' });
       }
       user = await Doctor.create({
-        name, email, password, phone, role: 'doctor',
+        ...userData,
         specialization, experience: Number(experience), qualifications,
-        consultationFee: Number(consultationFee), isVerified: true
+        consultationFee: Number(consultationFee)
       });
     } else if (role === 'admin') {
+      
       if (adminKey !== process.env.ADMIN_KEY) {
         return res.status(403).json({ success: false, message: 'Invalid admin key' });
       }
-      user = await Admin.create({ name, email, password, phone, role: 'admin', adminKey });
+      user = await Admin.create({ ...userData, adminKey });
     } else {
       return res.status(400).json({ success: false, message: 'Invalid role' });
     }
 
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'Smartcare - Verify your email',
+        message: `Your verification code is: ${otp}. It expires in 10 minutes.`
+      });
+      res.status(201).json({ success: true, message: 'OTP sent to email', email: user.email });
+    } catch (err) {
+      await User.findByIdAndDelete(user._id);
+      res.status(500).json({ success: false, message: 'Error sending email. Please try again.' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @route POST /api/auth/verify-otp
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const user = await User.findOne({ 
+      email: email.toLowerCase(), 
+      otp: otp.toString(), 
+      otpExpires: { $gt: Date.now() } 
+    });
+
+    if (!user) return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
     const token = generateToken(user._id);
     const userObj = user.toObject();
     delete userObj.password;
-    res.status(201).json({ success: true, token, user: userObj });
+
+    res.json({ success: true, message: 'Email verified!', token, user: userObj });
   } catch (error) {
-    console.error('Register error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @route POST /api/auth/resend-otp
+const resendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+
+    await sendEmail({ email: user.email, subject: 'Smartcare - New Code', message: `Your code is: ${otp}` });
+    res.json({ success: true, message: 'OTP resent' });
+  } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -54,24 +131,16 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
-    }
-
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    if (!user.isVerified) {
+      return res.status(401).json({ success: false, message: 'Please verify your email first' });
     }
-
     const token = generateToken(user._id);
     const userObj = user.toObject();
     delete userObj.password;
-
     res.json({ success: true, token, user: userObj });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -82,13 +151,7 @@ const login = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    // Convert to plain object and remove password for security
-    const userResponse = user.toObject();
-    delete userResponse.password;
-    res.json({ success: true, user: userResponse });
+    res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -97,71 +160,21 @@ const getMe = async (req, res) => {
 // @route PUT /api/auth/profile
 const updateProfile = async (req, res) => {
   try {
-    const allowedFields = ['name', 'phone', 'address', 'dateOfBirth', 'bio', 'qualifications', 'consultationFee', 'experience'];
-    const updates = {};
-    allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
-    });
-
-    const user = await User.findByIdAndUpdate(req.user.id, updates, { new: true, runValidators: true });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    const userResponse = user.toObject();
-    delete userResponse.password;
-    res.json({ success: true, user: userResponse });
+    const user = await User.findByIdAndUpdate(req.user.id, req.body, { new: true });
+    res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // @route PUT /api/auth/profile-image
-// Accepts base64 string - no multer needed, stored directly in DB
 const updateProfileImage = async (req, res) => {
   try {
-    const { profileImage } = req.body;
-    
-    if (!profileImage) {
-      return res.status(400).json({ success: false, message: 'No image provided' });
-    }
-    
-    // Validate it's a base64 image (data URI)
-    if (!profileImage.startsWith('data:image/')) {
-      return res.status(400).json({ success: false, message: 'Invalid image format. Must be a base64 data URI.' });
-    }
-    
-    // Rough size check: base64 ~1.37x raw size. Limit to ~2MB raw → ~2.7MB base64
-    if (profileImage.length > 2800000) {
-      return res.status(413).json({ success: false, message: 'Image too large. Please use an image under 2MB.' });
-    }
-    
-    console.log(`📸 Updating profile image for user ${req.user.id}, size: ${profileImage.length} bytes`);
-    
-    // Update using findByIdAndUpdate with explicit runValidators disabled for large data
-    const user = await User.findByIdAndUpdate(
-      req.user.id, 
-      { profileImage }, 
-      { new: true, runValidators: false }
-    );
-    
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    
-    console.log(`✅ Profile image updated successfully for ${user.email}`);
-    console.log(`   Saved data size: ${user.profileImage?.length || 0} bytes`);
-    
-    // Return the user object directly (don't use toJSON to preserve all fields)
-    // Manually remove password for security
-    const userResponse = user.toObject();
-    delete userResponse.password;
-    
-    console.log(`   Response includes profileImage: ${!!userResponse.profileImage}`);
-    res.json({ success: true, user: userResponse });
+    const user = await User.findByIdAndUpdate(req.user.id, { profileImage: req.body.profileImage }, { new: true });
+    res.json({ success: true, user });
   } catch (error) {
-    console.error('❌ Image upload error:', error);
-    res.status(500).json({ success: false, message: 'Failed to upload image: ' + error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = { register, login, getMe, updateProfile, updateProfileImage };
+module.exports = { register, verifyOTP, resendOTP, login, getMe, updateProfile, updateProfileImage };

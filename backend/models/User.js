@@ -8,7 +8,10 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['patient', 'doctor', 'admin'], required: true },
   phone: { type: String, trim: true },
   isActive: { type: Boolean, default: true },
-  profileImage: { type: String }
+  profileImage: { type: String },
+  isVerified: { type: Boolean, default: false },
+  otp: { type: String },
+  otpExpires: { type: Date }
 }, { timestamps: true, discriminatorKey: 'role' });
 
 userSchema.pre('save', async function(next) {
@@ -50,7 +53,6 @@ const doctorSchema = new mongoose.Schema({
     endTime: { type: String }
   }],
   appointments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Appointment' }],
-  isVerified: { type: Boolean, default: true },
   bio: { type: String }
 });
 const Doctor = User.discriminator('doctor', doctorSchema);

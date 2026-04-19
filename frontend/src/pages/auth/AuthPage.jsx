@@ -14,7 +14,9 @@ export default function AuthPage() {
   const [mode, setMode] = useState('login') // 'login' | 'signup'
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({})
-  const { login, register } = useAuth()
+  const [verifyingEmail, setVerifyingEmail] = useState(null)
+  const [otp, setOtp] = useState('')
+  const { login, register, verifyOTP } = useAuth()
   const navigate = useNavigate()
 
   const handleRoleSelect = (role) => {
@@ -25,21 +27,35 @@ export default function AuthPage() {
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     try {
-      let user
       if (mode === 'login') {
-        user = await login(form.email, form.password)
-        toast.success(`Welcome back, ${user.name?.split(' ')[0]}!`)
+        const user = await login(form.email, form.password)
+        toast.success(`Welcome back!`)
+        navigate(`/${user.role}/dashboard`)
       } else {
-        user = await register(selectedRole.key, { ...form, role: selectedRole.key })
-        toast.success(`Account created! Welcome, ${user.name?.split(' ')[0]}!`)
+        await register(selectedRole.key, { ...form })
+        toast.success('Verification code sent!')
+        setVerifyingEmail(form.email) // Triggers the OTP UI
       }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Action failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const user = await verifyOTP(verifyingEmail, otp)
+      toast.success(`Welcome, ${user.name}!`)
       navigate(`/${user.role}/dashboard`)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Something went wrong')
+      toast.error(err.response?.data?.message || 'Invalid OTP')
     } finally {
       setLoading(false)
     }
@@ -68,6 +84,36 @@ export default function AuthPage() {
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+        ) : verifyingEmail ? (
+          // OTP Verification Form
+          <div className="max-w-md mx-auto">
+            <div className="card animate-slide-up text-center">
+              <div className="w-16 h-16 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
+                📧
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify your email</h2>
+              <p className="text-gray-500 mb-6 text-sm">
+                We've sent a code to <span className="font-semibold text-gray-700">{verifyingEmail}</span>
+              </p>
+              
+              <form onSubmit={handleVerifyOTP} className="space-y-4">
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="input text-center text-2xl tracking-[0.5em] font-mono"
+                  required
+                />
+                <button type="submit" disabled={loading || otp.length !== 6} className="btn-primary w-full py-3">
+                  {loading ? 'Verifying...' : 'Verify Account'}
+                </button>
+              </form>
+              <button onClick={() => setVerifyingEmail(null)} className="mt-6 text-sm text-gray-500 hover:text-primary-600">
+                ← Back to registration
+              </button>
             </div>
           </div>
         ) : (

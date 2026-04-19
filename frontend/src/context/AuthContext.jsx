@@ -13,15 +13,7 @@ export function AuthProvider({ children }) {
     const savedUser = localStorage.getItem('user')
     if (token && savedUser) {
       setUser(JSON.parse(savedUser))
-      // Verify token still valid
-      api.get('/auth/me').then(res => {
-        setUser(res.data.user)
-        localStorage.setItem('user', JSON.stringify(res.data.user))
-      }).catch(() => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        setUser(null)
-      }).finally(() => setLoading(false))
+      api.get('/auth/me').catch(() => logout()).finally(() => setLoading(false))
     } else {
       setLoading(false)
     }
@@ -38,6 +30,11 @@ export function AuthProvider({ children }) {
 
   const register = async (role, data) => {
     const res = await api.post(`/auth/register/${role}`, data)
+    return res.data 
+  }
+
+  const verifyOTP = async (email, otp) => {
+    const res = await api.post('/auth/verify-otp', { email, otp })
     const { token, user } = res.data
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(user))
@@ -45,20 +42,20 @@ export function AuthProvider({ children }) {
     return user
   }
 
+  // ADD THIS FUNCTION
+  const resendOTP = async (email) => {
+    const res = await api.post('/auth/resend-otp', { email })
+    return res.data
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     setUser(null)
-    toast.success('Logged out successfully')
-  }
-
-  const updateUser = (updatedUser) => {
-    setUser(updatedUser)
-    localStorage.setItem('user', JSON.stringify(updatedUser))
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, verifyOTP, resendOTP, logout }}>
       {children}
     </AuthContext.Provider>
   )
