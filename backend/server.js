@@ -4,7 +4,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const authRoutes = require('./routes/auth');
 const doctorRoutes = require('./routes/doctors');
@@ -105,7 +106,19 @@ app.use('*', (req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 5001;
+const server = app.listen(PORT, () => {
   console.log(`🚀 Smartcare HMS Server running on port ${PORT}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use.`);
+    console.error('   Stop the process using that port, or start the backend with a different PORT value.');
+    console.error('   Example: PORT=5001 npm run dev');
+    process.exit(1);
+  }
+
+  console.error('❌ Server startup error:', error);
+  process.exit(1);
 });

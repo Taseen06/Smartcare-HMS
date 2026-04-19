@@ -24,7 +24,7 @@ cp .env.example .env
 
 Edit `.env`:
 ```env
-PORT=5000
+PORT=5001
 MONGODB_URI=mongodb://localhost:27017/smartcare_hms
 JWT_SECRET=change_this_to_a_long_random_string
 JWT_EXPIRE=7d
@@ -36,7 +36,7 @@ NODE_ENV=development
 ```bash
 npm install
 npm run seed     # Seed database with sample data
-npm run dev      # Start backend on port 5000
+npm run dev      # Start backend on port 5001
 ```
 
 ### 3. Frontend Setup
