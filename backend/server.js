@@ -23,17 +23,18 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Body parsing - MUST be before rate limiter for large payloads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Rate limiting - after body parsing
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  skip: (req) => req.path === '/api/auth/profile-image' // Skip rate limit for file uploads
 });
 app.use('/api/', limiter);
-
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
 
 // Logging
 if (process.env.NODE_ENV === 'development') {
@@ -57,6 +58,37 @@ app.use('/api/contact', contactRoutes);
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Smartcare HMS API is running' });
+});
+
+// Diagnostic endpoint for testing image upload
+app.post('/api/debug/test-image-upload', (req, res) => {
+  try {
+    const { profileImage } = req.body;
+    const size = profileImage ? profileImage.length : 0;
+    console.log('Debug endpoint: Received image data');
+    console.log('  - Size:', size, 'bytes');
+    console.log('  - Is base64:', profileImage?.startsWith('data:image/'));
+    console.log('  - Type:', profileImage?.substring(0, 30));
+    
+    if (!profileImage) {
+      return res.status(400).json({ success: false, message: 'No image data' });
+    }
+    if (size > 2800000) {
+      return res.status(413).json({ success: false, message: `Image too large: ${size} bytes (max 2800000)` });
+    }
+    if (!profileImage.startsWith('data:image/')) {
+      return res.status(400).json({ success: false, message: 'Invalid format' });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Image data looks good!',
+      sizeBytes: size,
+      sizeMB: (size / 1024 / 1024).toFixed(2)
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 // Error handling middleware

@@ -1,6 +1,7 @@
 const { User } = require('../models/User');
 const Test = require('../models/Test');
 const Appointment = require('../models/Appointment');
+const bcrypt = require('bcryptjs');
 
 const getAllDoctors = async (req, res) => {
   try {
@@ -11,19 +12,37 @@ const getAllDoctors = async (req, res) => {
   }
 };
 
-const verifyDoctor = async (req, res) => {
+const removeDoctor = async (req, res) => {
   try {
-    const doctor = await User.findByIdAndUpdate(req.params.id, { isVerified: req.body.isVerified }, { new: true }).select('-password');
-    res.json({ success: true, doctor });
+    await User.findByIdAndUpdate(req.params.id, { isActive: false });
+    res.json({ success: true, message: 'Doctor removed' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-const removeDoctor = async (req, res) => {
+// Update admin key (system-wide)
+const updateAdminKey = async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.params.id, { isActive: false });
-    res.json({ success: true, message: 'Doctor removed' });
+    const { currentPassword, newAdminKey } = req.body;
+    if (!currentPassword || !newAdminKey) {
+      return res.status(400).json({ success: false, message: 'Current password and new admin key are required' });
+    }
+    if (newAdminKey.length < 8) {
+      return res.status(400).json({ success: false, message: 'Admin key must be at least 8 characters' });
+    }
+    // Verify admin's own password first
+    const admin = await User.findById(req.user.id).select('+password');
+    const isMatch = await admin.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Incorrect password' });
+    }
+    // Update env-level key isn't possible at runtime, so we store it on the admin user
+    // and update the process.env so it takes effect for this session
+    process.env.ADMIN_KEY = newAdminKey;
+    // Also update all admin users' stored key
+    await User.updateMany({ role: 'admin' }, { adminKey: newAdminKey });
+    res.json({ success: true, message: 'Admin key updated successfully. Update your .env file to persist across restarts.' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -93,4 +112,4 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-module.exports = { getAllDoctors, verifyDoctor, removeDoctor, getAdminTests, getTestRequests, updateAppointment, getDashboardStats };
+module.exports = { getAllDoctors, removeDoctor, updateAdminKey, getAdminTests, getTestRequests, updateAppointment, getDashboardStats };

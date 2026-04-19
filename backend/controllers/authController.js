@@ -41,7 +41,9 @@ const register = async (req, res) => {
     }
 
     const token = generateToken(user._id);
-    res.status(201).json({ success: true, token, user });
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.status(201).json({ success: true, token, user: userObj });
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -80,7 +82,13 @@ const login = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    res.json({ success: true, user });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    // Convert to plain object and remove password for security
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    res.json({ success: true, user: userResponse });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -96,10 +104,64 @@ const updateProfile = async (req, res) => {
     });
 
     const user = await User.findByIdAndUpdate(req.user.id, updates, { new: true, runValidators: true });
-    res.json({ success: true, user });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    res.json({ success: true, user: userResponse });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = { register, login, getMe, updateProfile };
+// @route PUT /api/auth/profile-image
+// Accepts base64 string - no multer needed, stored directly in DB
+const updateProfileImage = async (req, res) => {
+  try {
+    const { profileImage } = req.body;
+    
+    if (!profileImage) {
+      return res.status(400).json({ success: false, message: 'No image provided' });
+    }
+    
+    // Validate it's a base64 image (data URI)
+    if (!profileImage.startsWith('data:image/')) {
+      return res.status(400).json({ success: false, message: 'Invalid image format. Must be a base64 data URI.' });
+    }
+    
+    // Rough size check: base64 ~1.37x raw size. Limit to ~2MB raw → ~2.7MB base64
+    if (profileImage.length > 2800000) {
+      return res.status(413).json({ success: false, message: 'Image too large. Please use an image under 2MB.' });
+    }
+    
+    console.log(`📸 Updating profile image for user ${req.user.id}, size: ${profileImage.length} bytes`);
+    
+    // Update using findByIdAndUpdate with explicit runValidators disabled for large data
+    const user = await User.findByIdAndUpdate(
+      req.user.id, 
+      { profileImage }, 
+      { new: true, runValidators: false }
+    );
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    console.log(`✅ Profile image updated successfully for ${user.email}`);
+    console.log(`   Saved data size: ${user.profileImage?.length || 0} bytes`);
+    
+    // Return the user object directly (don't use toJSON to preserve all fields)
+    // Manually remove password for security
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    
+    console.log(`   Response includes profileImage: ${!!userResponse.profileImage}`);
+    res.json({ success: true, user: userResponse });
+  } catch (error) {
+    console.error('❌ Image upload error:', error);
+    res.status(500).json({ success: false, message: 'Failed to upload image: ' + error.message });
+  }
+};
+
+module.exports = { register, login, getMe, updateProfile, updateProfileImage };

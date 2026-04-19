@@ -112,8 +112,12 @@ export default function Doctors() {
           {doctors.map((doctor, i) => (
             <div key={doctor._id} className="card hover:shadow-md transition-all animate-slide-up" style={{ animationDelay: `${(i % 6) * 0.05}s` }}>
               <div className="flex gap-4 mb-4">
-                <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${avatarColors[i % 4]} flex items-center justify-center text-white font-heading font-bold text-xl flex-shrink-0`}>
-                  {doctor.name.charAt(0)}
+                <div className={`w-16 h-16 rounded-xl overflow-hidden ${doctor.profileImage ? 'bg-transparent' : `bg-gradient-to-br ${avatarColors[i % 4]}`} flex items-center justify-center text-white font-heading font-bold text-xl flex-shrink-0`}>
+                  {doctor.profileImage ? (
+                    <img src={doctor.profileImage} alt={doctor.name} className="w-full h-full object-cover" />
+                  ) : (
+                    doctor.name.charAt(0)
+                  )}
                 </div>
                 <div>
                   <h3 className="font-heading font-semibold text-gray-900 leading-tight">{doctor.name}</h3>
