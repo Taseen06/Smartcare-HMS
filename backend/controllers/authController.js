@@ -178,3 +178,4 @@ const updateProfileImage = async (req, res) => {
 };
 
 module.exports = { register, verifyOTP, resendOTP, login, getMe, updateProfile, updateProfileImage };
+
