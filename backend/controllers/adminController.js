@@ -1,6 +1,7 @@
 const { User } = require('../models/User');
 const Test = require('../models/Test');
 const Appointment = require('../models/Appointment');
+const Contact = require('../models/Contact');
 const bcrypt = require('bcryptjs');
 
 const getAllDoctors = async (req, res) => {
@@ -125,17 +126,42 @@ const updateAppointment = async (req, res) => {
 
 const getDashboardStats = async (req, res) => {
   try {
-    const [totalDoctors, totalPatients, totalTests, totalAppointments, pendingAppointments] = await Promise.all([
+    const [totalDoctors, totalPatients, totalTests, totalAppointments, pendingAppointments, totalMessages, unreadMessages] = await Promise.all([
       User.countDocuments({ role: 'doctor', isActive: true }),
       User.countDocuments({ role: 'patient' }),
       Test.countDocuments({ isActive: true }),
       Appointment.countDocuments(),
-      Appointment.countDocuments({ status: 'pending' })
+      Appointment.countDocuments({ status: 'pending' }),
+      Contact.countDocuments(),
+      Contact.countDocuments({ status: 'unread' })
     ]);
-    res.json({ success: true, stats: { totalDoctors, totalPatients, totalTests, totalAppointments, pendingAppointments } });
+    res.json({ success: true, stats: { totalDoctors, totalPatients, totalTests, totalAppointments, pendingAppointments, totalMessages, unreadMessages } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = { getAllDoctors, removeDoctor, updateAdminKey, getAdminKey, getAdminTests, getTestRequests, updateAppointment, getDashboardStats };
+const getContactMessages = async (req, res) => {
+  try {
+    const messages = await Contact.find().sort({ createdAt: -1 });
+    res.json({ success: true, messages });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const updateContactMessageStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['unread', 'read', 'responded'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+    const message = await Contact.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    if (!message) return res.status(404).json({ success: false, message: 'Message not found' });
+    res.json({ success: true, message });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getAllDoctors, removeDoctor, updateAdminKey, getAdminKey, getAdminTests, getTestRequests, updateAppointment, getDashboardStats, getContactMessages, updateContactMessageStatus };

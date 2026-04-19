@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({})
   const [tests, setTests] = useState([])
   const [doctors, setDoctors] = useState([])
+  const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedTest, setSelectedTest] = useState(null)
   const [testAppointments, setTestAppointments] = useState([])
@@ -46,6 +47,7 @@ export default function AdminDashboard() {
     if (tab === 'tests') loadTests()
     if (tab === 'doctors') loadDoctors()
     if (tab === 'stats') loadStats()
+    if (tab === 'messages') loadMessages()
     if (tab === 'settings') loadAdminKey()
   }, [tab])
 
@@ -73,6 +75,15 @@ export default function AdminDashboard() {
       const res = await api.get('/admin/doctors')
       setDoctors(res.data.doctors || [])
     } catch { toast.error('Failed to load doctors') }
+    finally { setLoading(false) }
+  }
+
+  const loadMessages = async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/admin/contacts')
+      setMessages(res.data.messages || [])
+    } catch { toast.error('Failed to load messages') }
     finally { setLoading(false) }
   }
 
@@ -189,6 +200,16 @@ export default function AdminDashboard() {
     }
   }
 
+  const updateMessageStatus = async (messageId, status) => {
+    try {
+      await api.put(`/admin/contacts/${messageId}/status`, { status })
+      toast.success('Message status updated')
+      loadMessages()
+    } catch {
+      toast.error('Failed to update message status')
+    }
+  }
+
   const updateAptStatus = async (id, status) => {
     try {
       await api.put(`/admin/appointments/${id}`, { status })
@@ -225,6 +246,7 @@ export default function AdminDashboard() {
         <div className="flex gap-2 mb-8 flex-wrap">
           {[
             { key: 'stats', label: '📊 Overview' },
+            { key: 'messages', label: '💬 Messages' },
             { key: 'tests', label: '🔬 Tests' },
             { key: 'doctors', label: '👨‍⚕️ Doctors' },
             { key: 'settings', label: '⚙️ Settings' },
@@ -240,13 +262,15 @@ export default function AdminDashboard() {
         {tab === 'stats' && (
           <div className="animate-fade-in">
             <h2 className="font-heading font-bold text-xl text-gray-900 mb-6">Hospital Overview</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 mb-8">
               {[
                 { label: 'Doctors', value: stats.totalDoctors || 0, icon: '👨‍⚕️', bg: 'bg-blue-50', color: 'text-blue-600' },
                 { label: 'Patients', value: stats.totalPatients || 0, icon: '🧑‍🦱', bg: 'bg-green-50', color: 'text-green-600' },
                 { label: 'Tests', value: stats.totalTests || 0, icon: '🔬', bg: 'bg-teal-50', color: 'text-teal-600' },
                 { label: 'Total Bookings', value: stats.totalAppointments || 0, icon: '📋', bg: 'bg-purple-50', color: 'text-purple-600' },
                 { label: 'Pending', value: stats.pendingAppointments || 0, icon: '⏳', bg: 'bg-yellow-50', color: 'text-yellow-600' },
+                { label: 'Messages', value: stats.totalMessages || 0, icon: '💬', bg: 'bg-indigo-50', color: 'text-indigo-600' },
+                { label: 'Unread', value: stats.unreadMessages || 0, icon: '📬', bg: 'bg-red-50', color: 'text-red-600' },
               ].map((s, i) => (
                 <div key={i} className={`${s.bg} rounded-2xl p-5 animate-slide-up`} style={{ animationDelay: `${i * 0.06}s` }}>
                   <div className="text-2xl mb-2">{s.icon}</div>
@@ -439,6 +463,55 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MESSAGES TAB ── */}
+        {tab === 'messages' && (
+          <div className="animate-fade-in">
+            <h2 className="font-heading font-bold text-xl text-gray-900 mb-6">Contact Messages</h2>
+            {loading ? <LoadingSkeleton /> : messages.length === 0 ? (
+              <div className="card text-center py-12">
+                <div className="text-4xl mb-3">💬</div>
+                <p className="text-gray-500">No messages received yet</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((msg, i) => (
+                  <div key={msg._id} className="card hover:shadow-md transition-all animate-slide-up"
+                    style={{ animationDelay: `${i * 0.04}s` }}>
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-heading font-semibold text-gray-900">{msg.name}</h3>
+                        <p className="text-primary-600 text-sm">{msg.email}</p>
+                        <p className="text-gray-500 text-xs">{format(new Date(msg.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={msg.status}
+                          onChange={(e) => updateMessageStatus(msg._id, e.target.value)}
+                          className="text-xs border border-gray-200 rounded-lg px-2 py-1"
+                        >
+                          <option value="unread">Unread</option>
+                          <option value="read">Read</option>
+                          <option value="responded">Responded</option>
+                        </select>
+                        <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                          msg.status === 'unread' ? 'bg-red-100 text-red-600' :
+                          msg.status === 'read' ? 'bg-yellow-100 text-yellow-600' :
+                          'bg-green-100 text-green-600'
+                        }`}>
+                          {msg.status}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-gray-700 whitespace-pre-wrap">{msg.message}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

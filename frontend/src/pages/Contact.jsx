@@ -5,16 +5,34 @@ import toast from 'react-hot-toast'
 export default function Contact() {
   const [form, setForm] = useState({ name: '', email: '', message: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [errors, setErrors] = useState({})
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const validateForm = () => {
+    const newErrors = {}
+    if (!form.name.trim()) newErrors.name = 'Name is required'
+    if (!form.email.trim()) newErrors.email = 'Email is required'
+    else if (!validateEmail(form.email)) newErrors.email = 'Please enter a valid email address'
+    if (!form.message.trim()) newErrors.message = 'Message is required'
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!validateForm()) return
     setSubmitting(true)
     try {
       await api.post('/contact', form)
       toast.success('Message sent successfully! We\'ll be in touch soon.')
       setForm({ name: '', email: '', message: '' })
-    } catch {
-      toast.error('Failed to send message. Please try again.')
+      setErrors({})
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send message. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -64,17 +82,20 @@ export default function Contact() {
             <div>
               <label className="label">Full Name <span className="text-red-400">*</span></label>
               <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder="Your full name" className="input" required />
+                placeholder="Your full name" className={`input ${errors.name ? 'border-red-300 focus:border-red-500' : ''}`} required />
+              {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
             </div>
             <div>
               <label className="label">Email Address <span className="text-red-400">*</span></label>
               <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                placeholder="your@email.com" className="input" required />
+                placeholder="your@email.com" className={`input ${errors.email ? 'border-red-300 focus:border-red-500' : ''}`} required />
+              {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
             </div>
             <div>
               <label className="label">Message <span className="text-red-400">*</span></label>
               <textarea value={form.message} onChange={e => setForm({ ...form, message: e.target.value })}
-                placeholder="How can we help you?" rows={5} className="input resize-none" required />
+                placeholder="How can we help you?" rows={5} className={`input resize-none ${errors.message ? 'border-red-300 focus:border-red-500' : ''}`} required />
+              {errors.message && <p className="text-red-500 text-sm mt-1">{errors.message}</p>}
             </div>
             <button type="submit" disabled={submitting} className="btn-primary w-full">
               {submitting ? 'Sending...' : 'Send Message'}

@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const {
   getAllDoctors, removeDoctor, updateAdminKey, getAdminKey,
-  getAdminTests, getTestRequests, updateAppointment, getDashboardStats
+  getAdminTests, getTestRequests, updateAppointment, getDashboardStats,
+  getContactMessages, updateContactMessageStatus
 } = require('../controllers/adminController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -16,5 +17,7 @@ router.get('/admin-key', getAdminKey);
 router.get('/tests', getAdminTests);
 router.get('/tests/:testId/requests', getTestRequests);
 router.put('/appointments/:id', updateAppointment);
+router.get('/contacts', getContactMessages);
+router.put('/contacts/:id/status', updateContactMessageStatus);
 
 module.exports = router;
