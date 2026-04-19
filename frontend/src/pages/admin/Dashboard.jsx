@@ -31,7 +31,8 @@ export default function AdminDashboard() {
   const [showTestForm, setShowTestForm] = useState(false)
   const [editingTest, setEditingTest] = useState(null)
   const [testForm, setTestForm] = useState({ name: '', description: '', price: '', duration: '', category: 'other', preparationInstructions: '' })
-  const [savingTest, setSavingTest] = useState(false)
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
+  const [doctorToRemove, setDoctorToRemove] = useState(null)
   const [adminKey, setAdminKey] = useState('')
   const [showAdminKey, setShowAdminKey] = useState(false)
   const [updatingKey, setUpdatingKey] = useState(false)
@@ -170,21 +171,22 @@ export default function AdminDashboard() {
     } catch { toast.error('Failed to delete test') }
   }
 
-  const verifyDoctor = async (id, isVerified) => {
-    try {
-      await api.put(`/admin/doctors/${id}/verify`, { isVerified })
-      toast.success(isVerified ? 'Doctor verified' : 'Doctor unverified')
-      loadDoctors()
-    } catch { toast.error('Failed to update doctor') }
+  const removeDoctor = (doctor) => {
+    setDoctorToRemove(doctor)
+    setShowRemoveConfirm(true)
   }
 
-  const removeDoctor = async (id) => {
-    if (!confirm('Remove this doctor from the system?')) return
+  const confirmRemoveDoctor = async () => {
+    if (!doctorToRemove) return
     try {
-      await api.delete(`/admin/doctors/${id}`)
-      toast.success('Doctor removed')
+      await api.delete(`/admin/doctors/${doctorToRemove._id}`)
+      toast.success('Doctor removed successfully')
       loadDoctors()
-    } catch { toast.error('Failed to remove doctor') }
+      setShowRemoveConfirm(false)
+      setDoctorToRemove(null)
+    } catch {
+      toast.error('Failed to remove doctor')
+    }
   }
 
   const updateAptStatus = async (id, status) => {
@@ -270,7 +272,7 @@ export default function AdminDashboard() {
                     <span className="text-xl">👨‍⚕️</span>
                     <div>
                       <div className="font-semibold text-sm text-blue-800">Manage Doctors</div>
-                      <div className="text-xs text-blue-600">Verify, view or remove doctors</div>
+                      <div className="text-xs text-blue-600">View and remove doctors</div>
                     </div>
                     <span className="ml-auto text-blue-500">→</span>
                   </button>
@@ -457,31 +459,28 @@ export default function AdminDashboard() {
                   <div key={doc._id} className={`card hover:shadow-md transition-all animate-slide-up ${!doc.isActive ? 'opacity-50' : ''}`}
                     style={{ animationDelay: `${i * 0.04}s` }}>
                     <div className="flex gap-4">
-                      <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-primary-600 rounded-xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
-                        {doc.name?.charAt(0)}
+                      <div className={`w-14 h-14 rounded-xl overflow-hidden ${doc.profileImage ? 'bg-transparent' : 'bg-gradient-to-br from-blue-500 to-primary-600'} flex items-center justify-center text-white font-bold text-xl flex-shrink-0`}>
+                        {doc.profileImage ? (
+                          <img src={doc.profileImage} alt={doc.name} className="w-full h-full object-cover" />
+                        ) : (
+                          doc.name?.charAt(0)
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-heading font-semibold text-gray-900">{doc.name}</h3>
-                          {doc.isVerified
-                            ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">✓ Verified</span>
-                            : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">Unverified</span>}
                           {!doc.isActive && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">Removed</span>}
                         </div>
                         <div className="text-primary-600 text-sm font-medium">{doc.specialization}</div>
                         <div className="text-gray-500 text-sm">{doc.experience} yrs · {doc.qualifications}</div>
                         <div className="text-gray-500 text-sm">{doc.email} · {doc.phone}</div>
+                        {doc.bio && <div className="text-gray-600 text-sm mt-1 italic">"{doc.bio}"</div>}
                         <div className="font-semibold text-gray-900 text-sm mt-1">৳{doc.consultationFee}</div>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
-                      {doc.isVerified ? (
-                        <button onClick={() => verifyDoctor(doc._id, false)} className="btn-secondary text-xs py-1.5 px-3 flex-1">Unverify</button>
-                      ) : (
-                        <button onClick={() => verifyDoctor(doc._id, true)} className="btn-success text-xs py-1.5 px-3 flex-1">Verify</button>
-                      )}
                       {doc.isActive && (
-                        <button onClick={() => removeDoctor(doc._id)} className="btn-danger text-xs py-1.5 px-3">Remove</button>
+                        <button onClick={() => removeDoctor(doc)} className="btn-danger text-xs py-1.5 px-3 w-full">Remove Doctor</button>
                       )}
                     </div>
                   </div>
@@ -691,6 +690,74 @@ export default function AdminDashboard() {
                   <span className="text-sm text-gray-600">Slot Duration</span>
                   <span className="text-sm font-medium text-gray-900">15 minutes</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Remove Doctor Confirmation Modal ── */}
+      {showRemoveConfirm && doctorToRemove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md animate-slide-up">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-lg text-gray-900">Remove Doctor</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4 mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-10 h-10 rounded-lg overflow-hidden ${doctorToRemove.profileImage ? 'bg-transparent' : 'bg-gradient-to-br from-blue-500 to-primary-600'} flex items-center justify-center text-white font-bold flex-shrink-0`}>
+                    {doctorToRemove.profileImage ? (
+                      <img src={doctorToRemove.profileImage} alt={doctorToRemove.name} className="w-full h-full object-cover" />
+                    ) : (
+                      doctorToRemove.name?.charAt(0)
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-gray-900">{doctorToRemove.name}</div>
+                    <div className="text-sm text-gray-600">{doctorToRemove.specialization}</div>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div>📧 {doctorToRemove.email}</div>
+                  <div>📞 {doctorToRemove.phone}</div>
+                  <div>💼 {doctorToRemove.experience} years experience</div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-2">
+                  <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div className="text-sm text-amber-800">
+                    <strong>Warning:</strong> Removing this doctor will permanently delete their account and all associated data. Patients will no longer be able to book appointments with this doctor.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowRemoveConfirm(false); setDoctorToRemove(null) }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRemoveDoctor}
+                  className="btn-danger flex-1"
+                >
+                  Remove Doctor
+                </button>
               </div>
             </div>
           </div>
