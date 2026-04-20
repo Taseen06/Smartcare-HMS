@@ -1,175 +1,175 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { motion } from 'framer-motion'
+import {
+  Search, Stethoscope, Clock, GraduationCap, Phone,
+  CalendarCheck, Star, SlidersHorizontal, ChevronRight
+} from 'lucide-react'
 import api from '../utils/api'
 import BookingModal from '../components/common/BookingModal'
 import toast from 'react-hot-toast'
 
-const SPECIALIZATIONS = ['All', 'Cardiology', 'Neurology', 'Pediatrics', 'Orthopedics', 'Dermatology', 'Oncology', 'General Medicine']
+const FU = (delay = 0) => ({
+  initial: { opacity: 0, y: 18 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: '-40px' },
+  transition: { duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] },
+})
+
+const SPECS = ['All', 'Cardiology', 'Neurology', 'Pediatrics', 'Orthopedics', 'Dermatology', 'Oncology', 'General Medicine']
+const GRAD = ['from-blue-600 to-indigo-700', 'from-teal-500 to-emerald-600', 'from-violet-600 to-purple-700', 'from-rose-500 to-pink-600']
 
 export default function Doctors() {
-  const [doctors, setDoctors] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [selectedSpec, setSelectedSpec] = useState('All')
-  const [bookingDoctor, setBookingDoctor] = useState(null)
-  const { user } = useAuth()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [doctors, setDoctors]       = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [search, setSearch]         = useState('')
+  const [selectedSpec, setSpec]     = useState('All')
+  const [bookingDoctor, setBooking] = useState(null)
+  const { user }  = useAuth()
+  const navigate  = useNavigate()
+  const [params]  = useSearchParams()
 
   useEffect(() => {
-    const spec = searchParams.get('specialization')
-    if (spec) setSelectedSpec(spec)
-  }, [searchParams])
+    const s = params.get('specialization')
+    if (s) setSpec(s)
+  }, [params])
 
-  useEffect(() => {
-    fetchDoctors()
-  }, [selectedSpec, search])
+  useEffect(() => { fetchDoctors() }, [selectedSpec, search])
 
   const fetchDoctors = async () => {
     setLoading(true)
     try {
-      const params = {}
-      if (search) params.search = search
-      if (selectedSpec !== 'All') params.specialization = selectedSpec
-      const res = await api.get('/doctors', { params })
+      const p = {}
+      if (search) p.search = search
+      if (selectedSpec !== 'All') p.specialization = selectedSpec
+      const res = await api.get('/doctors', { params: p })
       setDoctors(res.data.doctors || [])
-    } catch {
-      toast.error('Failed to load doctors')
-    } finally {
-      setLoading(false)
-    }
+    } catch { toast.error('Failed to load doctors') }
+    finally { setLoading(false) }
   }
 
-  const handleBookClick = (doctor) => {
-    if (!user) {
-      toast.error('Please login to book an appointment')
-      navigate('/auth')
-      return
-    }
-    if (user.role !== 'patient') {
-      toast.error('Only patients can book appointments')
-      return
-    }
-    setBookingDoctor(doctor)
+  const handleBook = (doc) => {
+    if (!user) { toast.error('Please login to book an appointment'); navigate('/auth'); return }
+    if (user.role !== 'patient') { toast.error('Only patients can book appointments'); return }
+    setBooking(doc)
   }
-
-  const avatarColors = ['from-blue-500 to-primary-600', 'from-teal-500 to-green-600', 'from-purple-500 to-pink-500', 'from-orange-500 to-red-500']
 
   return (
     <div className="page-container">
-      <div className="mb-8 animate-fade-in">
-        <h1 className="section-title">Our Doctors</h1>
-        <p className="text-gray-500">Find and book appointments with our expert specialists</p>
-      </div>
+      {/* Header */}
+      <motion.div {...FU(0)} className="mb-8">
+        <p className="section-label">Our Physicians</p>
+        <h1 className="section-title">Find a Doctor</h1>
+        <p className="text-slate-500 text-sm mt-1">Book appointments with our expert specialists</p>
+      </motion.div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-8">
-        <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input type="text" placeholder="Search doctors..." value={search} onChange={e => setSearch(e.target.value)}
-            className="input pl-10" />
+      <motion.div {...FU(0.07)} className="flex flex-col sm:flex-row gap-3 mb-7">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input type="text" placeholder="Search doctors by name..." value={search}
+            onChange={e => setSearch(e.target.value)} className="input pl-10 text-sm" />
         </div>
         <div className="flex gap-2 flex-wrap">
-          {SPECIALIZATIONS.slice(0, 5).map(spec => (
-            <button key={spec} onClick={() => setSelectedSpec(spec)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${selectedSpec === spec ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-primary-300'}`}>
-              {spec}
+          {SPECS.slice(0, 5).map(s => (
+            <button key={s} onClick={() => setSpec(s)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border ${
+                selectedSpec === s
+                  ? 'bg-[#0F2744] text-white border-[#0F2744]'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300 hover:text-teal-700'
+              }`}>
+              {s}
             </button>
           ))}
         </div>
-      </div>
+      </motion.div>
 
       {/* Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[1,2,3].map(i => (
             <div key={i} className="card animate-pulse">
               <div className="flex gap-4 mb-4">
-                <div className="w-16 h-16 bg-gray-200 rounded-xl"/>
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"/>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"/>
+                <div className="w-16 h-16 bg-slate-200 rounded-xl flex-shrink-0" />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="h-4 bg-slate-200 rounded w-3/4" />
+                  <div className="h-3 bg-slate-200 rounded w-1/2" />
+                  <div className="h-3 bg-slate-200 rounded w-1/3" />
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="h-3 bg-gray-200 rounded"/>
-                <div className="h-3 bg-gray-200 rounded w-2/3"/>
-              </div>
+              <div className="h-9 bg-slate-200 rounded-xl" />
             </div>
           ))}
         </div>
       ) : doctors.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="text-5xl mb-4">👨‍⚕️</div>
-          <h3 className="font-heading font-semibold text-gray-900 mb-2">No doctors found</h3>
-          <p className="text-gray-500">Try adjusting your search or filter criteria</p>
+        <div className="card text-center py-16">
+          <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Stethoscope size={24} className="text-slate-400" />
+          </div>
+          <h3 className="font-bold text-slate-900 mb-1">No doctors found</h3>
+          <p className="text-slate-500 text-sm">Try adjusting your search or filter criteria</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {doctors.map((doctor, i) => (
-            <div key={doctor._id} className="card hover:shadow-md transition-all animate-slide-up" style={{ animationDelay: `${(i % 6) * 0.05}s` }}>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {doctors.map((doc, i) => (
+            <motion.div key={doc._id} {...FU((i % 6) * 0.05)}
+              className="card-hover group flex flex-col">
               <div className="flex gap-4 mb-4">
-                <div className={`w-16 h-16 rounded-xl overflow-hidden ${doctor.profileImage ? 'bg-transparent' : `bg-gradient-to-br ${avatarColors[i % 4]}`} flex items-center justify-center text-white font-heading font-bold text-xl flex-shrink-0`}>
-                  {doctor.profileImage ? (
-                    <img src={doctor.profileImage} alt={doctor.name} className="w-full h-full object-cover" />
-                  ) : (
-                    doctor.name.charAt(0)
-                  )}
+                <div className={`w-16 h-16 rounded-xl flex-shrink-0 flex items-center justify-center
+                                text-white font-bold text-2xl overflow-hidden
+                                ${doc.profileImage ? '' : `bg-gradient-to-br ${GRAD[i % 4]}`}`}>
+                  {doc.profileImage
+                    ? <img src={doc.profileImage} alt={doc.name} className="w-full h-full object-cover" />
+                    : doc.name.charAt(0)}
                 </div>
-                <div>
-                  <h3 className="font-heading font-semibold text-gray-900 leading-tight">{doctor.name}</h3>
-                  <span className="inline-block bg-primary-100 text-primary-700 text-xs font-semibold px-2 py-0.5 rounded-full mt-1">{doctor.specialization}</span>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-slate-900 leading-tight truncate">{doc.name}</h3>
+                  <span className="inline-block bg-teal-50 text-teal-700 border border-teal-200
+                                   text-xs font-semibold px-2 py-0.5 rounded-full mt-1">
+                    {doc.specialization}
+                  </span>
                 </div>
               </div>
 
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                  </svg>
-                  {doctor.qualifications || 'MBBS'}
+              <div className="space-y-2 mb-4 flex-1">
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <GraduationCap size={14} className="text-slate-400 flex-shrink-0" />
+                  {doc.qualifications || 'MBBS'}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {doctor.experience} years experience
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <Clock size={14} className="text-slate-400 flex-shrink-0" />
+                  {doc.experience} years experience
                 </div>
-                {doctor.phone && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    {doctor.phone}
+                {doc.phone && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Phone size={14} className="text-slate-400 flex-shrink-0" />
+                    {doc.phone}
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                 <div>
-                  <div className="text-xs text-gray-400">Consultation Fee</div>
-                  <div className="text-xl font-bold text-gray-900">৳{doctor.consultationFee}</div>
+                  <div className="text-xs text-slate-400">Consultation Fee</div>
+                  <div className="text-xl font-bold text-slate-900">৳{doc.consultationFee}</div>
                 </div>
-                <button onClick={() => handleBookClick(doctor)}
-                  className={`btn-primary py-2 px-4 text-sm ${!user ? 'opacity-75' : ''}`}>
+                <button onClick={() => handleBook(doc)}
+                  className={`flex items-center gap-1.5 text-sm font-semibold px-4 py-2.5 rounded-xl
+                              transition-all ${user
+                    ? 'bg-[#0F2744] group-hover:bg-teal-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                   {user ? 'Book Slot' : 'Login to Book'}
+                  <ChevronRight size={13} />
                 </button>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
 
-      <BookingModal
-        isOpen={!!bookingDoctor}
-        onClose={() => setBookingDoctor(null)}
-        item={bookingDoctor}
-        type="doctor"
-        onSuccess={fetchDoctors}
-      />
+      <BookingModal isOpen={!!bookingDoctor} onClose={() => setBooking(null)}
+        item={bookingDoctor} type="doctor" onSuccess={fetchDoctors} />
     </div>
   )
 }
